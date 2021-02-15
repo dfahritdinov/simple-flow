@@ -3,6 +3,7 @@ package com.fakhritdinov.simpleflow
 import cats.Parallel
 import cats.effect.concurrent.Ref
 import cats.effect.{Concurrent, Resource, Timer}
+import cats.implicits.catsStdInstancesForList
 import cats.syntax.all._
 import com.evolutiongaming.sstream.Stream
 import com.fakhritdinov.kafka._
@@ -23,7 +24,7 @@ class Flow[F[_]: Concurrent: Timer: Parallel, S, K, V](subscriptions: (Topic, Fl
         offsets <- states.parTraverse { case (_, state) =>
           for {
             state  <- state.get
-            offset <- state.map { case (_, wo) => wo.offset }.min.pure
+            offset <- state.map { case (_, wo) => wo.offset }.min.pure[F]
           } yield offset
         }
         _ <- consumer.commit(offsets)
@@ -64,7 +65,7 @@ class Flow[F[_]: Concurrent: Timer: Parallel, S, K, V](subscriptions: (Topic, Fl
 
     for {
       states <- Ref.of[F, States](Map.empty).resource
-      topics <- subscriptions.map(_._1).toSet.pure.resource
+      topics <- subscriptions.map(_._1).toSet.pure[F].resource
       _      <- consumer.subscribe(topics, new Listener(states).some).resource
       _      <- scheduleCommits(states)
     } yield runFlow(states)
@@ -74,9 +75,18 @@ class Flow[F[_]: Concurrent: Timer: Parallel, S, K, V](subscriptions: (Topic, Fl
 
     def onPartitionsRevoked(partitions: Set[TopicPartition]) = ???
 
-    def onPartitionsAssigned(partitions: Set[TopicPartition]) = ???
+    def onPartitionsAssigned(partitions: Set[TopicPartition]) =
+      for {
+        assigned <- partitions.toList.traverse { partition =>
+          for {
+            state <- Ref.of[F, State](Map.empty)
+          } yield partition -> state
+        }
+        _ <- states.update(_ ++ assigned.toMap)
+      } yield ()
 
-    def onPartitionsLost(partitions: Set[TopicPartition]) = ???
+    def onPartitionsLost(partitions: Set[TopicPartition]) =
+      states.update(_ -- partitions)
   }
 }
 
