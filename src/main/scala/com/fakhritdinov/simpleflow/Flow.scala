@@ -18,16 +18,46 @@ class Flow[F[_]: Concurrent: Timer: Parallel, S, K, V](subscriptions: (Topic, Fl
 
   def start(consumer: Consumer[F, K, V], config: Flow.Config): Resource[F, F[Unit]] = {
 
+    def offsets(states: States): F[Map[TopicPartition, Offset]] =
+      states.parTraverse { case (_, state) =>
+        for {
+          state  <- state.get
+          offset <- state.map { case (_, wo) => wo.offset }.min.pure[F]
+        } yield offset
+      }
+
+    class Listener(states: Ref[F, States]) extends ConsumerRebalanceListener[F] {
+
+      def onPartitionsRevoked(partitions: Set[TopicPartition]) = {
+        val revoked = states.modify { states =>
+          val active  = states -- partitions
+          val revoked = states.view.filterKeys(p => partitions contains p).toMap
+          active -> revoked
+        }
+        for {
+          revoked <- revoked
+          offsets <- offsets(revoked)
+          _       <- consumer.commit(offsets)
+        } yield ()
+      }
+
+      def onPartitionsAssigned(partitions: Set[TopicPartition]) =
+        for {
+          assigned <- partitions.toList.traverse { partition =>
+            Ref.of[F, State](Map.empty) map (partition -> _)
+          }
+          _ <- states.update(_ ++ assigned.toMap)
+        } yield ()
+
+      def onPartitionsLost(partitions: Set[TopicPartition]) =
+        states.update(_ -- partitions)
+    }
+
     def commitFlow(states: Ref[F, States]): Resource[F, F[Unit]] = {
       val commit = for {
-        states <- states.get
-        offsets <- states.parTraverse { case (_, state) =>
-          for {
-            state  <- state.get
-            offset <- state.map { case (_, wo) => wo.offset }.min.pure[F]
-          } yield offset
-        }
-        _ <- consumer.commit(offsets)
+        states  <- states.get
+        offsets <- offsets(states)
+        _       <- consumer.commit(offsets)
       } yield ()
       val stream = Stream
         .repeat(Timer[F].sleep(config.commitInterval) *> commit)
@@ -71,23 +101,6 @@ class Flow[F[_]: Concurrent: Timer: Parallel, S, K, V](subscriptions: (Topic, Fl
     } yield pollFlow(states)
   }
 
-  private class Listener(states: Ref[F, States]) extends ConsumerRebalanceListener[F] {
-
-    def onPartitionsRevoked(partitions: Set[TopicPartition]) = ???
-
-    def onPartitionsAssigned(partitions: Set[TopicPartition]) =
-      for {
-        assigned <- partitions.toList.traverse { partition =>
-          for {
-            state <- Ref.of[F, State](Map.empty)
-          } yield partition -> state
-        }
-        _ <- states.update(_ ++ assigned.toMap)
-      } yield ()
-
-    def onPartitionsLost(partitions: Set[TopicPartition]) =
-      states.update(_ -- partitions)
-  }
 }
 
 object Flow {
