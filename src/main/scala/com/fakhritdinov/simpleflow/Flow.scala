@@ -54,12 +54,12 @@ class Flow[F[_]: Concurrent: Timer: Parallel, S, K, V](subscriptions: (Topic, Fl
 
     def commitFlow(states: Ref[F, States]): Resource[F, F[Unit]] = {
       val commit = for {
+        _       <- Timer[F].sleep(config.commitInterval)
         states  <- states.get
         offsets <- offsets(states)
         _       <- consumer.commit(offsets)
       } yield ()
-      val step = Timer[F].sleep(config.commitInterval) *> commit
-      Concurrent[F].background(step.foreverM)
+      Concurrent[F].background(commit.foreverM)
     }
 
     def pollFlow(states: Ref[F, States]): F[Unit] =
