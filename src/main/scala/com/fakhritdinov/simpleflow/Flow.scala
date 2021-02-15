@@ -18,7 +18,7 @@ class Flow[F[_]: Concurrent: Timer: Parallel, S, K, V](subscriptions: (Topic, Fl
 
   def start(consumer: Consumer[F, K, V], config: Flow.Config): Resource[F, F[Unit]] = {
 
-    def scheduleCommits(states: Ref[F, States]): Resource[F, F[Unit]] = {
+    def commitFlow(states: Ref[F, States]): Resource[F, F[Unit]] = {
       val commit = for {
         states <- states.get
         offsets <- states.parTraverse { case (_, state) =>
@@ -35,7 +35,7 @@ class Flow[F[_]: Concurrent: Timer: Parallel, S, K, V](subscriptions: (Topic, Fl
       Concurrent[F].background(stream)
     }
 
-    def runFlow(states: Ref[F, States]): F[Unit] =
+    def pollFlow(states: Ref[F, States]): F[Unit] =
       Stream
         .repeat(consumer.poll(config.pollTimeout))
         .mapM { records =>
@@ -67,8 +67,8 @@ class Flow[F[_]: Concurrent: Timer: Parallel, S, K, V](subscriptions: (Topic, Fl
       states <- Ref.of[F, States](Map.empty).resource
       topics <- subscriptions.map(_._1).toSet.pure[F].resource
       _      <- consumer.subscribe(topics, new Listener(states).some).resource
-      _      <- scheduleCommits(states)
-    } yield runFlow(states)
+      _      <- commitFlow(states)
+    } yield pollFlow(states)
   }
 
   private class Listener(states: Ref[F, States]) extends ConsumerRebalanceListener[F] {
