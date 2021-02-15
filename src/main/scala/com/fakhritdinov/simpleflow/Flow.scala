@@ -5,7 +5,6 @@ import cats.effect.concurrent.Ref
 import cats.effect.{Concurrent, Resource, Timer}
 import cats.implicits.catsStdInstancesForList
 import cats.syntax.all._
-import com.evolutiongaming.sstream.Stream
 import com.fakhritdinov.kafka._
 import com.fakhritdinov.kafka.consumer._
 
@@ -59,16 +58,14 @@ class Flow[F[_]: Concurrent: Timer: Parallel, S, K, V](subscriptions: (Topic, Fl
         offsets <- offsets(states)
         _       <- consumer.commit(offsets)
       } yield ()
-      val stream = Stream
-        .repeat(Timer[F].sleep(config.commitInterval) *> commit)
-        .drain
-      Concurrent[F].background(stream)
+      val step = Timer[F].sleep(config.commitInterval) *> commit
+      Concurrent[F].background(step.foreverM)
     }
 
     def pollFlow(states: Ref[F, States]): F[Unit] =
-      Stream
-        .repeat(consumer.poll(config.pollTimeout))
-        .mapM { records =>
+      consumer
+        .poll(config.pollTimeout)
+        .flatMap { records =>
           records.parTraverse { case (partition, records) =>
             for {
               states <- states.get
@@ -91,7 +88,7 @@ class Flow[F[_]: Concurrent: Timer: Parallel, S, K, V](subscriptions: (Topic, Fl
             } yield ()
           }
         }
-        .drain
+        .foreverM
 
     for {
       states <- Ref.of[F, States](Map.empty).resource

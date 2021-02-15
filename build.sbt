@@ -8,6 +8,5 @@ version := "0.0.1-SNAPSHOT"
 resolvers += Resolver.bintrayRepo("evolutiongaming", "maven")
 
 libraryDependencies ++= Seq(
-  skafka,
-  sstream
+  cats.io
 )
