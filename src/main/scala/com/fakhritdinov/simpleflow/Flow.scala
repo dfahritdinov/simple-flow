@@ -36,7 +36,7 @@ class Flow[F[_]: Concurrent: Timer: Parallel, S, K, V](subscriptions: (Topic, Fl
         for {
           revoked <- revoked
           offsets <- offsets(revoked)
-          _       <- consumer.commit(offsets)
+          _       <- consumer.commit(offsets) // TODO: check is it safe to call commit here
         } yield ()
       }
 
