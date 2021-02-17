@@ -5,8 +5,7 @@ name := "simple-flow"
 organization := "com.fakhritdinov"
 version := "0.0.1-SNAPSHOT"
 
-resolvers += Resolver.bintrayRepo("evolutiongaming", "maven")
-
 libraryDependencies ++= Seq(
-  cats.io
+  cats.io,
+  kafka.client
 )

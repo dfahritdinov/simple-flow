@@ -36,16 +36,16 @@ class Flow[F[_]: Concurrent: Timer: Parallel, S, K, V](subscriptions: (Topic, Fl
         for {
           revoked <- revoked
           offsets <- offsets(revoked)
-          _       <- consumer.commit(offsets) // TODO: check is it safe to call commit here
+          _       <- consumer.commit(offsets)
         } yield ()
       }
 
       def onPartitionsAssigned(partitions: Set[TopicPartition]) =
         for {
           assigned <- partitions.toList.traverse { partition =>
-            Ref.of[F, State](Map.empty) map (partition -> _)
-          }
-          _ <- states.update(_ ++ assigned.toMap)
+                        Ref.of[F, State](Map.empty) map (partition -> _)
+                      }
+          _        <- states.update(_ ++ assigned.toMap)
         } yield ()
 
       def onPartitionsLost(partitions: Set[TopicPartition]) =
@@ -72,19 +72,19 @@ class Flow[F[_]: Concurrent: Timer: Parallel, S, K, V](subscriptions: (Topic, Fl
               state0 <- states(partition).get
               fold   <- subscriptions.toMap.apply(partition.topic).pure[F]
               state1 <- records.groupBy(_.k).parTraverse { case (key, records) =>
-                for {
-                  opt <- state0.get(key).pure[F]
-                  swo <- opt match {
-                    case Some(swo) => swo.pure[F]
-                    case None      => fold.init.map(s => Flow.WithOffset(s, 0L))
-                  }
-                  res <- fold(swo.state, records)
-                } yield res match {
-                  case (s1, Flow.Action.Commit) => Flow.WithOffset(s1, records.map(_.offset).min)
-                  case (s1, Flow.Action.Hold)   => Flow.WithOffset(s1, swo.offset)
-                }
-              }
-              _ <- states(partition).set(state1)
+                          for {
+                            opt <- state0.get(key).pure[F]
+                            swo <- opt match {
+                                     case Some(swo) => swo.pure[F]
+                                     case None      => fold.init.map(s => Flow.WithOffset(s, 0L))
+                                   }
+                            res <- fold(swo.state, records)
+                          } yield res match {
+                            case (s1, Flow.Action.Commit) => Flow.WithOffset(s1, records.map(_.offset).min)
+                            case (s1, Flow.Action.Hold)   => Flow.WithOffset(s1, swo.offset)
+                          }
+                        }
+              _      <- states(partition).set(state1)
             } yield ()
           }
         }
@@ -93,7 +93,7 @@ class Flow[F[_]: Concurrent: Timer: Parallel, S, K, V](subscriptions: (Topic, Fl
     for {
       states <- Ref.of[F, States](Map.empty).resource
       topics <- subscriptions.map(_._1).toSet.pure[F].resource
-      _      <- consumer.subscribe(topics, new Listener(states).some).resource
+      _      <- consumer.subscribe(topics, new Listener(states)).resource
       _      <- commitFlow(states)
     } yield pollFlow(states)
   }

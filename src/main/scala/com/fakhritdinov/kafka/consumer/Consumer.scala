@@ -1,63 +1,92 @@
 package com.fakhritdinov.kafka.consumer
 
+import cats.effect.{Blocker, Concurrent, ContextShift}
+import cats.effect.concurrent.Semaphore
+import cats.syntax.all._
+import com.fakhritdinov.effect.Unsafe
+import com.fakhritdinov.effect.Unsafe.implicits._
 import com.fakhritdinov.kafka._
+import org.apache.kafka.clients.consumer.{
+  Consumer => JavaConsumer,
+  ConsumerRebalanceListener => JavaConsumerRebalanceListener
+}
+import org.apache.kafka.common.{TopicPartition => JavaTopicPartition}
 
-import java.util.regex.Pattern
-import scala.concurrent.duration.FiniteDuration
+import java.util.{Collection => JavaCollection}
+import scala.jdk.CollectionConverters._
+import scala.jdk.DurationConverters._
+import scala.concurrent.duration._
 
 trait Consumer[F[_], K, V] {
 
-  def assignment: F[Set[TopicPartition]]
-
-  def subscription: F[Set[Topic]]
-
-  def subscribe(topics: Set[Topic], listener: Option[ConsumerRebalanceListener[F]]): F[Unit]
-
-  def subscribe(pattern: Pattern, listener: Option[ConsumerRebalanceListener[F]]): F[Unit]
-
-  def assign(partitions: Set[TopicPartition]): F[Unit]
+  def subscribe(topics: Set[Topic], listener: ConsumerRebalanceListener[F]): F[Unit]
 
   def poll(timeout: FiniteDuration): F[Map[TopicPartition, List[ConsumerRecord[K, V]]]]
 
-  def commit: F[Unit]
-
-  def commit(timeout: FiniteDuration): F[Unit]
-
   def commit(offsets: Map[TopicPartition, Offset]): F[Unit]
 
-  def commit(offsets: Map[TopicPartition, Offset], timeout: FiniteDuration): F[Unit]
+}
 
-  def seek(partitions: TopicPartition, offset: Offset): F[Unit]
+object Consumer {
 
-  def seekToBeginning(partitions: Set[TopicPartition]): F[Unit]
+  def apply[F[_]: Concurrent: ContextShift: Unsafe, K, V](
+    consumer: JavaConsumer[K, V],
+    blocker: Blocker
+  ): F[Consumer[F, K, V]] =
+    for {
+      semaphore <- Semaphore(1)
+    } yield new Impl[F, K, V](consumer, semaphore, blocker)
 
-  def seekToEnd(partitions: Set[TopicPartition]): F[Unit]
+  private class Impl[F[_]: Concurrent: ContextShift: Unsafe, K, V](
+    consumer: JavaConsumer[K, V],
+    semaphore: Semaphore[F],
+    blocker: Blocker
+  ) extends Consumer[F, K, V] {
 
-  def position(partition: TopicPartition): F[Offset]
+    val F = Concurrent[F]
 
-  def position(partition: TopicPartition, duration: FiniteDuration): F[Offset]
+    def sequential[A](f: F[A]): F[A] = semaphore.withPermit(f)
 
-  def committed(partition: TopicPartition): F[Offset]
+    def block[A](f: F[A]): F[A] = blocker.blockOn(f)
 
-  def committed(partition: TopicPartition, duration: FiniteDuration): F[Offset]
+    def subscribe(topics: Set[Topic], listener: ConsumerRebalanceListener[F]): F[Unit] =
+      sequential {
+        F.delay {
+          consumer.subscribe(topics.asJavaCollection, new RebalanceImpl(listener))
+        }
+      }
 
-  def committed(partitions: Set[TopicPartition]): F[Map[TopicPartition, Offset]]
+    def poll(timeout: FiniteDuration): F[Map[TopicPartition, List[ConsumerRecord[K, V]]]] =
+      sequential {
+        block {
+          F.delay {
+            consumer.poll(timeout.toJava).toScala
+          }
+        }
+      }
 
-  def committed(partitions: Set[TopicPartition], duration: FiniteDuration): F[Map[TopicPartition, Offset]]
+    def commit(offsets: Map[TopicPartition, Offset]): F[Unit] =
+      sequential {
+        block {
+          F.async { callback =>
+            consumer.commitAsync(offsets.toJava, callback.toJava)
+          }
+        }
+      }
 
-  def pause(partitions: Set[TopicPartition]): F[Unit]
+  }
 
-  def resume(partitions: Set[TopicPartition]): F[Unit]
+  private class RebalanceImpl[F[_]: Unsafe](listener: ConsumerRebalanceListener[F])
+      extends JavaConsumerRebalanceListener {
 
-  def paused: F[Set[TopicPartition]]
+    def onPartitionsRevoked(partitions: JavaCollection[JavaTopicPartition]) =
+      listener.onPartitionsRevoked(partitions.toScala).runUnsafe
 
-  def beginningOffsets(partitions: Set[TopicPartition]): F[Map[TopicPartition, Offset]]
+    def onPartitionsAssigned(partitions: JavaCollection[JavaTopicPartition]) =
+      listener.onPartitionsAssigned(partitions.toScala).runUnsafe
 
-  def beginningOffsets(partitions: Set[TopicPartition], duration: FiniteDuration): F[Map[TopicPartition, Offset]]
+    override def onPartitionsLost(partitions: JavaCollection[JavaTopicPartition]) =
+      listener.onPartitionsLost(partitions.toScala).runUnsafe
+  }
 
-  def endOffsets(partitions: Set[TopicPartition]): F[Map[TopicPartition, Offset]]
-
-  def endOffsets(partitions: Set[TopicPartition], duration: FiniteDuration): F[Map[TopicPartition, Offset]]
-
-  def wakeup: F[Unit]
 }
