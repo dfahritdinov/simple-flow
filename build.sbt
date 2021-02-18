@@ -1,11 +1,18 @@
 import Dependencies._
 
-scalaVersion := "2.13.3"
 name := "simple-flow"
 organization := "com.fakhritdinov"
+scalaVersion := "2.13.3"
 version := "0.0.1-SNAPSHOT"
 
-libraryDependencies ++= Seq(
+lazy val root = { project in file(".") }
+  .configs(IntegrationTest)
+  .settings(Defaults.itSettings)
+  .settings(libraryDependencies ++= deps)
+
+val deps = Seq(
   cats.io,
-  kafka.client
+  kafka.client,
+  testcontainers.kafka % Test,
+  scalatest            % Test
 )

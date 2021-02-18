@@ -2,14 +2,15 @@ package com.fakhritdinov.kafka
 
 import cats.syntax.either._
 import org.apache.kafka.clients.consumer.{
-  OffsetAndMetadata => JavaOffsetAndMetadata,
-  OffsetCommitCallback => JavaOffsetCommitCallback,
+  ConsumerRecord => JavaConsumerRecord,
   ConsumerRecords => JavaConsumerRecords,
-  ConsumerRecord => JavaConsumerRecord
+  OffsetAndMetadata => JavaOffsetAndMetadata,
+  OffsetCommitCallback => JavaOffsetCommitCallback
 }
 import org.apache.kafka.common.{TopicPartition => JavaTopicPartition}
 
-import java.util.{Map => JavaMap, Collection => JavaCollection}
+import java.time.Instant
+import java.util.{Collection => JavaCollection, Map => JavaMap}
 import scala.jdk.CollectionConverters._
 
 package object consumer {
@@ -40,7 +41,15 @@ package object consumer {
 
   implicit final class ConsumerRecordConverter[K, V](val javaRecord: JavaConsumerRecord[K, V]) extends AnyVal {
 
-    def toScala: ConsumerRecord[K, V] = ???
+    // TODO: key & value can be null
+    def toScala: ConsumerRecord[K, V] = ConsumerRecord(
+      topicPartition = TopicPartition(javaRecord.topic, javaRecord.partition),
+      key = WithSize(javaRecord.key, javaRecord.serializedKeySize),
+      value = WithSize(javaRecord.value, javaRecord.serializedValueSize),
+      offset = javaRecord.offset,
+      timestamp = Instant.ofEpochMilli(javaRecord.timestamp),
+      headers = javaRecord.headers.asScala.map { h => Header(h.key, h.value) }.toSet
+    )
 
   }
 
