@@ -3,7 +3,7 @@ package com.fakhritdinov.kafka.consumer
 import cats.effect.{Blocker, Concurrent, ContextShift}
 import cats.effect.concurrent.Semaphore
 import cats.syntax.all._
-import com.fakhritdinov.effect.Unsafe
+import com.fakhritdinov.effect.{Sequential, Unsafe}
 import com.fakhritdinov.effect.Unsafe.implicits._
 import com.fakhritdinov.kafka._
 import org.apache.kafka.clients.consumer.{
@@ -34,40 +34,44 @@ object Consumer {
     blocker: Blocker
   ): F[Consumer[F, K, V]] =
     for {
-      semaphore <- Semaphore(1)
-    } yield new Impl[F, K, V](consumer, semaphore, blocker)
+      lock <- Semaphore(1)
+      wrap <- Sequential[F]
+    } yield new Impl[F, K, V](consumer, lock, wrap, blocker)
 
-  private class Impl[F[_]: Concurrent: ContextShift: Unsafe, K, V](
+  private final class Impl[F[_]: Concurrent: ContextShift: Unsafe, K, V](
     consumer: JavaConsumer[K, V],
-    semaphore: Semaphore[F],
+    lock: Semaphore[F],
+    wrap: Sequential[F],
     blocker: Blocker
   ) extends Consumer[F, K, V] {
 
     val F = Concurrent[F]
 
-    def sequential[A](f: F[A]): F[A] = semaphore.withPermit(f)
+    def singleThreaded[A](f: F[A]): F[A] = lock.withPermit(f)
 
-    def block[A](f: F[A]): F[A] = blocker.blockOn(f)
+    def blocking[A](f: F[A]): F[A] = blocker.blockOn(f)
 
     def subscribe(topics: Set[Topic], listener: ConsumerRebalanceListener[F]): F[Unit] =
-      sequential {
+      singleThreaded {
         F.delay {
-          consumer.subscribe(topics.asJavaCollection, new RebalanceImpl(listener))
+          consumer.subscribe(topics.asJavaCollection, new RebalanceImpl(listener, wrap))
         }
       }
 
     def poll(timeout: FiniteDuration): F[Map[TopicPartition, List[ConsumerRecord[K, V]]]] =
-      sequential {
-        block {
-          F.delay {
-            consumer.poll(timeout.toJava).toScala
+      singleThreaded {
+        wrap.outer {
+          blocking {
+            F.delay {
+              consumer.poll(timeout.toJava).toScala
+            }
           }
         }
       }
 
     def commit(offsets: Map[TopicPartition, Offset]): F[Unit] =
-      sequential {
-        block {
+      singleThreaded {
+        blocking {
           F.async { callback =>
             consumer.commitAsync(offsets.toJava, callback.toJava)
           }
@@ -76,17 +80,24 @@ object Consumer {
 
   }
 
-  private class RebalanceImpl[F[_]: Unsafe](listener: ConsumerRebalanceListener[F])
+  private class RebalanceImpl[F[_]: Unsafe](listener: ConsumerRebalanceListener[F], wrap: Sequential[F])
       extends JavaConsumerRebalanceListener {
 
     def onPartitionsRevoked(partitions: JavaCollection[JavaTopicPartition]) =
-      listener.onPartitionsRevoked(partitions.toScala).runUnsafe
+      wrap.inner {
+        listener.onPartitionsRevoked(partitions.toScala)
+      }.runAsync
 
     def onPartitionsAssigned(partitions: JavaCollection[JavaTopicPartition]) =
-      listener.onPartitionsAssigned(partitions.toScala).runUnsafe
+      wrap.inner {
+        listener.onPartitionsAssigned(partitions.toScala)
+      }.runAsync
 
     override def onPartitionsLost(partitions: JavaCollection[JavaTopicPartition]) =
-      listener.onPartitionsLost(partitions.toScala).runUnsafe
+      wrap.inner {
+        listener.onPartitionsLost(partitions.toScala)
+      }.runAsync
+
   }
 
 }

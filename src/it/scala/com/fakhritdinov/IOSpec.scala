@@ -1,4 +1,4 @@
-package com.fakhritdinov.simpleflow
+package com.fakhritdinov
 
 import cats.effect.{Blocker, IO}
 import org.scalatest.Suite

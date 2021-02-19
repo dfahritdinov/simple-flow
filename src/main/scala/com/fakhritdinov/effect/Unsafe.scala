@@ -3,8 +3,11 @@ package com.fakhritdinov.effect
 import cats.Id
 import cats.effect.IO
 
+import scala.concurrent.Future
+
 trait Unsafe[F[_]] {
-  def run[A](fa: F[A]): A
+  def runSync[A](fa: F[A]): A
+  def runAsync[A](fa: F[A]): Future[A]
 }
 
 object Unsafe {
@@ -14,15 +17,18 @@ object Unsafe {
   object implicits {
 
     implicit final class UnsafeSyntax[F[_], A](val fa: F[A]) extends AnyVal {
-      def runUnsafe(implicit F: Unsafe[F]): A = F.run(fa)
+      def runSync(implicit F: Unsafe[F]): A          = F.runSync(fa)
+      def runAsync(implicit F: Unsafe[F]): Future[A] = F.runAsync(fa)
     }
 
-    implicit val io: Unsafe[IO] = new Unsafe[IO] {
-      def run[A](fa: IO[A]): A = fa.unsafeRunSync()
+    implicit val unsafeIO: Unsafe[IO] = new Unsafe[IO] {
+      def runSync[A](fa: IO[A]): A          = fa.unsafeRunSync()
+      def runAsync[A](fa: IO[A]): Future[A] = fa.unsafeToFuture()
     }
 
-    implicit val id: Unsafe[Id] = new Unsafe[Id] {
-      def run[A](fa: Id[A]): A = fa
+    implicit val unsafeId: Unsafe[Id] = new Unsafe[Id] {
+      def runSync[A](fa: Id[A]): A          = fa
+      def runAsync[A](fa: Id[A]): Future[A] = Future.successful(fa)
     }
 
   }

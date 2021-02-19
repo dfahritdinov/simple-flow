@@ -13,6 +13,7 @@ lazy val root = { project in file(".") }
 val deps = Seq(
   cats.io,
   kafka.client,
-  testcontainers.kafka % Test,
+  testcontainers.kafka % IntegrationTest,
+  scalatest            % IntegrationTest,
   scalatest            % Test
 )

@@ -1,6 +1,7 @@
 package com.fakhritdinov.simpleflow
 
 import cats.effect.IO
+import com.fakhritdinov.IOSpec
 import com.fakhritdinov.effect.Unsafe.implicits._
 import com.fakhritdinov.kafka.consumer.{Consumer, ConsumerRecord}
 import com.fakhritdinov.simpleflow.FlowSpec._
@@ -19,9 +20,9 @@ class FlowSpec extends AnyFlatSpec with must.Matchers with BeforeAndAfterAll wit
 
   lazy val kafkaContainer = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:5.4.3"))
 
-  override def beforeAll = kafkaContainer.start()
+  override def beforeAll() = kafkaContainer.start()
 
-  override def afterAll = kafkaContainer.stop()
+  override def afterAll() = kafkaContainer.stop()
 
   it should "start simple-flow" in io {
     flow.use { infinite =>
