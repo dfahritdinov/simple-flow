@@ -71,19 +71,24 @@ class Flow[F[_]: Concurrent: Timer: Parallel, S, K, V](subscriptions: (Topic, Fl
               states <- states.get
               state0 <- states(partition).get
               fold   <- subscriptions.toMap.apply(partition.topic).pure[F]
-              state1 <- records.groupBy(_.k).parTraverse { case (key, records) =>
-                          for {
-                            opt <- state0.get(key).pure[F]
-                            swo <- opt match {
-                                     case Some(swo) => swo.pure[F]
-                                     case None      => fold.init.map(s => Flow.WithOffset(s, 0L))
-                                   }
-                            res <- fold(swo.state, records)
-                          } yield res match {
-                            case (s1, Flow.Action.Commit) => Flow.WithOffset(s1, records.map(_.offset).min)
-                            case (s1, Flow.Action.Hold)   => Flow.WithOffset(s1, swo.offset)
+              state1 <- records
+                          .map { r => r.k -> r }
+                          .collect { case (Some(k), r) => k -> r }
+                          .groupBy { case (k, _) => k }
+                          .parTraverse { case (key, records) =>
+                            for {
+                              records <- records.map { case (_, r) => r }.pure[F]
+                              opt     <- state0.get(key).pure[F]
+                              swo     <- opt match {
+                                           case Some(swo) => swo.pure[F]
+                                           case None      => fold.init.map(s => Flow.WithOffset(s, 0L))
+                                         }
+                              res     <- fold(swo.state, records)
+                            } yield res match {
+                              case (s1, Flow.Action.Commit) => Flow.WithOffset(s1, records.map(_.offset).min)
+                              case (s1, Flow.Action.Hold)   => Flow.WithOffset(s1, swo.offset)
+                            }
                           }
-                        }
               _      <- states(partition).set(state1)
             } yield ()
           }
@@ -92,7 +97,7 @@ class Flow[F[_]: Concurrent: Timer: Parallel, S, K, V](subscriptions: (Topic, Fl
 
     for {
       states <- Ref.of[F, States](Map.empty).resource
-      topics <- subscriptions.map(_._1).toSet.pure[F].resource
+      topics <- subscriptions.map { case (s, _) => s }.toSet.pure[F].resource
       _      <- consumer.subscribe(topics, new Listener(states)).resource
       _      <- commitFlow(states)
     } yield pollFlow(states)
@@ -108,6 +113,7 @@ object Flow {
   )
 
   sealed trait Action
+
   object Action {
     case object Commit extends Action
     case object Hold   extends Action

@@ -15,13 +15,21 @@ import scala.jdk.CollectionConverters._
 
 package object consumer {
 
-  implicit final class TopicPartitionConverter(val javaPartitions: JavaCollection[JavaTopicPartition]) extends AnyVal {
+  implicit final class JavaTopicPartitionOps(val javaPartitions: JavaCollection[JavaTopicPartition]) extends AnyVal {
 
-    def toScala: Set[TopicPartition] = javaPartitions.asScala.map(p => TopicPartition(p.topic, p.partition)).toSet
+    def toScala: Set[TopicPartition] =
+      javaPartitions.asScala.map(p => TopicPartition(p.topic, p.partition)).toSet
 
   }
 
-  implicit final class OffsetsConverter(val offsets: Map[TopicPartition, Offset]) extends AnyVal {
+  implicit final class TopicPartitionOps(val partitions: Set[TopicPartition]) extends AnyVal {
+
+    def toJava: JavaCollection[JavaTopicPartition] =
+      partitions.map(p => new JavaTopicPartition(p.topic, p.partition)).asJavaCollection
+
+  }
+
+  implicit final class OffsetsOps(val offsets: Map[TopicPartition, Offset]) extends AnyVal {
 
     def toJava: JavaMap[JavaTopicPartition, JavaOffsetAndMetadata] =
       offsets.map { case (TopicPartition(t, p), o) =>
@@ -30,7 +38,7 @@ package object consumer {
 
   }
 
-  implicit final class CallbackConverter(val callback: Either[Throwable, Unit] => Unit) extends AnyVal {
+  implicit final class CallbackOps(val callback: Either[Throwable, Unit] => Unit) extends AnyVal {
 
     def toJava: JavaOffsetCommitCallback =
       (_, exception: Exception) =>
@@ -39,21 +47,21 @@ package object consumer {
 
   }
 
-  implicit final class ConsumerRecordConverter[K, V](val javaRecord: JavaConsumerRecord[K, V]) extends AnyVal {
+  implicit final class JavaConsumerRecordOps[K, V](val r: JavaConsumerRecord[K, V]) extends AnyVal {
 
-    // TODO: key & value can be null
-    def toScala: ConsumerRecord[K, V] = ConsumerRecord(
-      topicPartition = TopicPartition(javaRecord.topic, javaRecord.partition),
-      key = WithSize(javaRecord.key, javaRecord.serializedKeySize),
-      value = WithSize(javaRecord.value, javaRecord.serializedValueSize),
-      offset = javaRecord.offset,
-      timestamp = Instant.ofEpochMilli(javaRecord.timestamp),
-      headers = javaRecord.headers.asScala.map { h => Header(h.key, h.value) }.toSet
-    )
+    def toScala: ConsumerRecord[K, V] =
+      ConsumerRecord(
+        topicPartition = TopicPartition(r.topic, r.partition),
+        key = Option(r.key) map { key => WithSize(key, r.serializedKeySize) },
+        value = Option(r.value) map { value => WithSize(value, r.serializedValueSize) },
+        offset = r.offset,
+        timestamp = Instant.ofEpochMilli(r.timestamp),
+        headers = r.headers.asScala.map { h => Header(h.key, h.value) }.toSet
+      )
 
   }
 
-  implicit final class ConsumerRecordsConverter[K, V](val javaRecords: JavaConsumerRecords[K, V]) extends AnyVal {
+  implicit final class JavaConsumerRecordsOps[K, V](val javaRecords: JavaConsumerRecords[K, V]) extends AnyVal {
 
     def toScala: Map[TopicPartition, List[ConsumerRecord[K, V]]] = {
       val set = for {
@@ -67,4 +75,5 @@ package object consumer {
     }
 
   }
+
 }

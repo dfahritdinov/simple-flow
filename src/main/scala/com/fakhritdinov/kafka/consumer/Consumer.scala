@@ -21,6 +21,8 @@ trait Consumer[F[_], K, V] {
 
   def subscribe(topics: Set[Topic], listener: ConsumerRebalanceListener[F]): F[Unit]
 
+  def assign(partitions: Set[TopicPartition]): F[Unit]
+
   def poll(timeout: FiniteDuration): F[Map[TopicPartition, List[ConsumerRecord[K, V]]]]
 
   def commit(offsets: Map[TopicPartition, Offset]): F[Unit]
@@ -31,7 +33,7 @@ object Consumer {
 
   def apply[F[_]: Concurrent: ContextShift: Unsafe, K, V](
     consumer: JavaConsumer[K, V],
-    blocker: Blocker
+    blocker:  Blocker
   ): F[Consumer[F, K, V]] =
     for {
       lock <- Semaphore(1)
@@ -40,9 +42,9 @@ object Consumer {
 
   private final class Impl[F[_]: Concurrent: ContextShift: Unsafe, K, V](
     consumer: JavaConsumer[K, V],
-    lock: Semaphore[F],
-    wrap: Sequential[F],
-    blocker: Blocker
+    lock:     Semaphore[F],
+    wrap:     Sequential[F],
+    blocker:  Blocker
   ) extends Consumer[F, K, V] {
 
     val F = Concurrent[F]
@@ -55,6 +57,13 @@ object Consumer {
       singleThreaded {
         F.delay {
           consumer.subscribe(topics.asJavaCollection, new RebalanceImpl(listener, wrap))
+        }
+      }
+
+    def assign(partitions: Set[TopicPartition]): F[Unit] =
+      singleThreaded {
+        F.delay {
+          consumer.assign(partitions.toJava)
         }
       }
 

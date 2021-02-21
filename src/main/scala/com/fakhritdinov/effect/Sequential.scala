@@ -22,7 +22,7 @@ object Sequential {
 
   private final class Impl[F[_]: Concurrent](
     state: Ref[F, F[Unit]],
-    lock: Semaphore[F]
+    lock:  Semaphore[F]
   ) extends Sequential[F] {
 
     val empty = ().pure[F]

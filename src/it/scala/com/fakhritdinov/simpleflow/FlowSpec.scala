@@ -54,7 +54,7 @@ object FlowSpec {
 
   val fold = new Flow.Fold[IO, String, String, String] {
     def apply(state: String, records: List[ConsumerRecord[String, String]]) = IO.pure("" -> Flow.Action.Commit)
-    def init: IO[String]                                                    = IO.pure("")
+    def init: IO[String] = IO.pure("")
   }
 
 }

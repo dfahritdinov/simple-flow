@@ -19,4 +19,5 @@ package object simpleflow {
       Parallel.parTraverse(map.toList) { case (k, v) => f(k, v) map (k -> _) } map (_.toMap)
 
   }
+
 }
