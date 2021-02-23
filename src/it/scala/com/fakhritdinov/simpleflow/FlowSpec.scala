@@ -43,17 +43,17 @@ class FlowSpec extends AnyFlatSpec with must.Matchers with BeforeAndAfterAll wit
 
   lazy val flow = for {
     consumer <- consumer.resource
-    flow     <- new Flow("topic" -> fold).start(consumer, config)
+    flow     <- new Legacy("topic" -> fold).start(consumer, config)
   } yield flow
 
 }
 
 object FlowSpec {
 
-  val config = Flow.Config(1.second, 1.second)
+  val config = Legacy.Config(1.second, 1.second)
 
-  val fold = new Flow.Fold[IO, String, String, String] {
-    def apply(state: String, records: List[ConsumerRecord[String, String]]) = IO.pure("" -> Flow.Action.Commit)
+  val fold = new Legacy.Fold[IO, String, String, String] {
+    def apply(state: String, records: List[ConsumerRecord[String, String]]) = IO.pure("" -> Legacy.Action.Commit)
     def init: IO[String] = IO.pure("")
   }
 
