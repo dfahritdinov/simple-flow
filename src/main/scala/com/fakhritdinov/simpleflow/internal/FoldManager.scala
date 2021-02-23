@@ -21,7 +21,7 @@ private[simpleflow] class FoldManager[F[_]: Concurrent: Parallel, S, K, V](
           val fold = folds.getOrElse(partition.topic, throw new NoFoldException(partition))
           val s0   = state0.partitions(partition)
           for {
-            // polled records by key
+            // records by key
             rbk <- records
                      .groupBy(_.k)
                      .collect { case (Some(key), records) => key -> records }
@@ -39,7 +39,7 @@ private[simpleflow] class FoldManager[F[_]: Concurrent: Parallel, S, K, V](
                      }
                      .map(_.toMap)
 
-            // fold results
+            // fold per key
             res <- rbk
                      .traverse { case (key, records) =>
                        fold(sbk(key), records)

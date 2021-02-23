@@ -4,14 +4,15 @@ import cats.Parallel
 import cats.effect.concurrent.Ref
 import cats.effect.{Concurrent, Resource, Timer}
 import cats.syntax.all._
+import com.fakhritdinov.effect.Unsafe
 import com.fakhritdinov.kafka._
 import com.fakhritdinov.kafka.consumer._
-import com.fakhritdinov.simpleflow.internal.{CommitManager, FlowState, FoldManager, PersistenceManager}
+import com.fakhritdinov.simpleflow.internal._
 
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.FiniteDuration
 
-class Flow[F[_]: Concurrent: Timer: Parallel, S, K, V](subscriptions: (Topic, Fold[F, S, K, V])*) {
+class Flow[F[_]: Concurrent: Parallel: Timer: Unsafe, S, K, V](subscriptions: (Topic, Fold[F, S, K, V])*) {
 
   def start(
     consumer:    Consumer[F, K, V],
@@ -19,9 +20,10 @@ class Flow[F[_]: Concurrent: Timer: Parallel, S, K, V](subscriptions: (Topic, Fo
     config:      Flow.Config
   ): Resource[F, F[Unit]] = {
 
-    val fm = new FoldManager(subscriptions.toMap)
-    val pm = new PersistenceManager(persistence, config.persistInterval.toMillis)
+    val fm = new FoldManager[F, S, K, V](subscriptions.toMap)
+    val pm = new PersistenceManager[F, K, S](persistence, config.persistInterval.toMillis)
     val cm = new CommitManager[F, S, K, V](consumer, config.commitInterval.toMillis)
+    val rm = new RebalanceManager[F, S, K, V](pm)
 
     val topics = subscriptions.map { case (s, _) => s }.toSet
 
@@ -41,7 +43,7 @@ class Flow[F[_]: Concurrent: Timer: Parallel, S, K, V](subscriptions: (Topic, Fo
     val loop: F[F[Unit]] = for {
       now   <- Timer[F].clock.monotonic(TimeUnit.MILLISECONDS)
       state <- Ref.of[F, FlowState[K, S]](FlowState(Map.empty, now, now))
-      _     <- consumer.subscribe(topics, ???)
+      _     <- consumer.subscribe(topics, rm.listener(state))
     } yield consumer
       .poll(config.pollTimeout)
       .flatMap(onPoll(state))
