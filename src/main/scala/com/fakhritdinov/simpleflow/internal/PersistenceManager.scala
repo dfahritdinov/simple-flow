@@ -7,7 +7,10 @@ import com.fakhritdinov.simpleflow.Persistence
 
 import java.util.concurrent.TimeUnit
 
-class PersistenceManager[F[_]: Concurrent: Timer, K, S](persistence: Persistence[F, K, S], interval: Long) {
+private[simpleflow] class PersistenceManager[F[_]: Concurrent: Timer, K, S](
+  persistence: Persistence[F, K, S],
+  interval:    Long
+) {
 
   def persist(state0: FlowState[K, S]): F[FlowState[K, S]] =
     for {

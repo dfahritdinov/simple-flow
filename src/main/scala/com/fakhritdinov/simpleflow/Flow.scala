@@ -6,7 +6,7 @@ import cats.effect.{Concurrent, Resource, Timer}
 import cats.syntax.all._
 import com.fakhritdinov.kafka._
 import com.fakhritdinov.kafka.consumer._
-import com.fakhritdinov.simpleflow.internal.{FlowState, FoldManager, PersistenceManager}
+import com.fakhritdinov.simpleflow.internal.{CommitManager, FlowState, FoldManager, PersistenceManager}
 
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.FiniteDuration
@@ -21,8 +21,7 @@ class Flow[F[_]: Concurrent: Timer: Parallel, S, K, V](subscriptions: (Topic, Fo
 
     val fm = new FoldManager(subscriptions.toMap)
     val pm = new PersistenceManager(persistence, config.persistInterval.toMillis)
-
-    import fm.fold, pm.persist
+    val cm = new CommitManager[F, S, K, V](consumer, config.commitInterval.toMillis)
 
     val topics = subscriptions.map { case (s, _) => s }.toSet
 
@@ -33,9 +32,10 @@ class Flow[F[_]: Concurrent: Timer: Parallel, S, K, V](subscriptions: (Topic, Fo
     ): F[Unit] =
       for {
         s0 <- state.get
-        s1 <- fold(s0, records)
-        s2 <- persist(s1)
-        _  <- commit(s2, records)
+        s1 <- fm.fold(s0, records)
+        s2 <- pm.persist(s1)
+        s3 <- cm.commit(s2)
+        _  <- state.set(s3)
       } yield ()
 
     val loop: F[F[Unit]] = for {
@@ -49,11 +49,6 @@ class Flow[F[_]: Concurrent: Timer: Parallel, S, K, V](subscriptions: (Topic, Fo
 
     Resource.liftF(loop)
   }
-
-  private def commit(
-    state:   FlowState[K, S],
-    records: Map[TopicPartition, List[ConsumerRecord[K, V]]]
-  ): F[FlowState[K, S]] = ???
 
 }
 

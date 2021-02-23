@@ -17,6 +17,8 @@ import scala.jdk.CollectionConverters._
 import scala.jdk.DurationConverters._
 import scala.concurrent.duration._
 
+// TODO: implement .close 
+
 trait Consumer[F[_], K, V] {
 
   def subscribe(topics: Set[Topic], listener: ConsumerRebalanceListener[F]): F[Unit]
