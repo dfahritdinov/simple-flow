@@ -33,12 +33,27 @@ private[simpleflow] class RebalanceManager[F[_]: Concurrent: Timer: Unsafe, S, K
       def onPartitionsAssigned(
         consumer:   BlockingConsumer[K, V],
         partitions: Set[TopicPartition]
-      ): Unit = ???
+      ): Unit = {
+        val f = for {
+          s0 <- state.get
+          rs <- pm.restore(partitions)
+          s1  = s0.copy(partitions = s0.partitions ++ rs)
+          _  <- state.set(s1)
+        } yield ()
+        f.runSync
+      }
 
       def onPartitionsLost(
         consumer:   BlockingConsumer[K, V],
         partitions: Set[TopicPartition]
-      ): Unit = ???
+      ): Unit = {
+        val f = for {
+          s0 <- state.get
+          s1  = s0.copy(partitions = s0.partitions -- partitions)
+          _  <- state.set(s1)
+        } yield ()
+        f.runSync
+      }
 
     }
 
