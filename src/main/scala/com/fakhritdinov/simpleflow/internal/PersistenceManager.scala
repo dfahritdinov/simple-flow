@@ -1,9 +1,10 @@
 package com.fakhritdinov.simpleflow.internal
 
-import cats.syntax.all._
 import cats.effect.{Concurrent, Timer}
-import com.fakhritdinov.kafka.TopicPartition
+import cats.syntax.all._
 import com.fakhritdinov.simpleflow.Persistence
+import com.fakhritdinov.simpleflow.Persistence.Snapshot
+import com.fakhritdinov.simpleflow.internal.State.KeyState
 
 import java.util.concurrent.TimeUnit
 
@@ -12,29 +13,26 @@ private[simpleflow] class PersistenceManager[F[_]: Concurrent: Timer, K, S](
   interval:    Long
 ) {
 
-  def persist(state0: FlowState[K, S]): F[FlowState[K, S]] =
+  def persist(state0: State[K, S]): F[State[K, S]] =
     for {
-      now       <- Timer[F].clock.monotonic(TimeUnit.MILLISECONDS)
-      should     = state0.lastPersistTime + interval < now
-      snapshot0  = state0.partitions.collect {
-                     case (p, s) if s.persistedOffset < s.polledOffset => p -> s.values
-                   }
-      snapshot1 <- if (should) persistence.persist(snapshot0)
-                   else Map.empty[TopicPartition, Map[K, S]].pure[F]
+      now     <- Timer[F].clock.monotonic(TimeUnit.MILLISECONDS)
+      should   = state0.lastPersistTime + interval < now
+      snapshot = stateToSnapshot(state0)
+      _       <- if (should) persistence.persist(snapshot)
+                 else ().pure[F]
     } yield {
-      val partitions = state0.partitions.map { case (k, s0) =>
-        val s1 = snapshot1.get(k) match {
-          case None     => s0
-          case Some(s1) => s0.copy(values = s1, persistedOffset = s0.polledOffset)
-        }
-        k -> s1
+      val partitions = state0.partitions.map { case (p, map) =>
+        p -> map.view.mapValues { ks => ks.copy(toCommitOffset = ks.polledOffset) }.toMap
       }
       state0.copy(
-        // format: off
-        partitions      = partitions,
+        partitions = partitions,
         lastPersistTime = now
-        // format: on
       )
+    }
+
+  private def stateToSnapshot(state: State[K, S]): Snapshot[K, S] =
+    state.partitions.map { case (p, map) =>
+      p -> map.view.mapValues { case KeyState(s, o, _) => s -> o }.toMap
     }
 
 }

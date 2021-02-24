@@ -1,6 +1,6 @@
 package com.fakhritdinov.kafka.consumer
 
-import cats.effect.{Blocker, Concurrent, ContextShift, Sync}
+import cats.effect.{Async, Blocker, ContextShift, Sync}
 import com.fakhritdinov.kafka._
 import org.apache.kafka.clients.consumer.{
   Consumer => JavaConsumer,
@@ -27,13 +27,13 @@ trait Consumer[F[_], K, V] {
 
 object Consumer {
 
-  def apply[F[_]: Concurrent: ContextShift, K, V](
+  def apply[F[_]: Async: ContextShift, K, V](
     consumer: JavaConsumer[K, V],
     blocker:  Blocker
   ): F[Consumer[F, K, V]] =
     Sync[F].delay { new Impl[F, K, V](consumer, blocker) }
 
-  private final class Impl[F[_]: Concurrent: ContextShift, K, V](
+  private final class Impl[F[_]: Async: ContextShift, K, V](
     consumer: JavaConsumer[K, V],
     blocker:  Blocker
   ) extends Consumer[F, K, V] {
@@ -60,7 +60,7 @@ object Consumer {
 
     def commit(offsets: Map[TopicPartition, Offset]): F[Unit] =
       blocker.blockOn {
-        Concurrent[F].async { callback =>
+        Async[F].async { callback =>
           consumer.commitAsync(offsets.toJava, callback.toJava)
         }
       }

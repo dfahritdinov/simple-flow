@@ -5,6 +5,7 @@ import cats.effect.Concurrent
 import cats.syntax.all._
 import com.fakhritdinov.kafka._
 import com.fakhritdinov.kafka.consumer._
+import com.fakhritdinov.simpleflow.internal.State.KeyState
 import com.fakhritdinov.simpleflow.{Fold, NoFoldException}
 
 private[simpleflow] class FoldManager[F[_]: Concurrent: Parallel, S, K, V](
@@ -12,61 +13,50 @@ private[simpleflow] class FoldManager[F[_]: Concurrent: Parallel, S, K, V](
 ) {
 
   def fold(
-    state0:  FlowState[K, S],
+    state0:  State[K, S],
     records: Map[TopicPartition, List[ConsumerRecord[K, V]]]
-  ): F[FlowState[K, S]] = {
+  ): F[State[K, S]] = {
+
+    import Fold.Action._
+
     val state1 =
       records.toList
         .parTraverse { case (partition, records) =>
           val fold = folds.getOrElse(partition.topic, throw new NoFoldException(partition))
           val s0   = state0.partitions(partition)
           for {
-            // records by key
             rbk <- records
                      .groupBy(_.k)
                      .collect { case (Some(key), records) => key -> records }
                      .toList
                      .pure[F]
-
-            // states by key
-            sbk <- rbk
-                     .traverse { case (key, _) =>
-                       val s = s0.values.get(key) match {
-                         case Some(s) => s.pure[F]
-                         case None    => fold.init
+            s1  <- rbk
+                     .traverse { case (key, records) =>
+                       val ks = s0.get(key) match {
+                         case Some(ks) => ks.pure[F]
+                         case None     => fold.init.map(s => KeyState(s))
                        }
-                       s map (key -> _)
+                       for {
+                         ks                  <- ks
+                         KeyState(s0, ol, o0) = ks
+                         r                   <- fold(s0, ol, records)
+                       } yield {
+                         val (s1, action) = r
+                         val op           = records.map(_.offset).min
+                         val o1           = action match {
+                           case Commit => op
+                           case Hold   => o0
+                         }
+                         key -> KeyState(s1, op, o1)
+                       }
                      }
                      .map(_.toMap)
-
-            // fold per key
-            res <- rbk
-                     .traverse { case (key, records) =>
-                       fold(sbk(key), records)
-                         .map {
-                           case (s1, Fold.Action.Commit) => key -> s1 -> records.map(_.offset).min
-                           case (s1, Fold.Action.Hold)   => key -> s1 -> s0.toCommitOffset
-                         }
-                     }
-                     .map(_.unzip)
-
-            // new partition state
-            s1   = {
-              val (values, offsets) = res
-              s0.copy(
-                // format: off
-                values         = s0.values ++ values.toMap,
-                toCommitOffset = offsets.min,
-                polledOffset   = records.map(_.offset).min
-                // format: on
-              )
-            }
-          } yield partition -> s1
+          } yield partition -> (s0 ++ s1)
         }
 
     for {
       s1 <- state1
-    } yield state0.copy(partitions = state0.partitions ++ s1.toMap)
+    } yield state0.copy(partitions = s1.toMap)
   }
 
 }

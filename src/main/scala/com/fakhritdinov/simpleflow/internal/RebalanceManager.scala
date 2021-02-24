@@ -10,7 +10,7 @@ import com.fakhritdinov.kafka.consumer.{BlockingConsumer, BlockingRebalanceListe
 
 private[simpleflow] class RebalanceManager[F[_]: Concurrent: Timer: Unsafe, S, K, V](pm: PersistenceManager[F, K, S]) {
 
-  def listener(state: Ref[F, FlowState[K, S]]): BlockingRebalanceListener[K, V] =
+  def listener(state: Ref[F, State[K, S]]): BlockingRebalanceListener[K, V] =
     new BlockingRebalanceListener[K, V] {
 
       def onPartitionsRevoked(
@@ -23,9 +23,9 @@ private[simpleflow] class RebalanceManager[F[_]: Concurrent: Timer: Unsafe, S, K
           _  <- state.set(s1)
           sr <- pm.persist {
                   val revoked = s0.partitions.view.filterKeys(p => partitions.contains(p)).toMap
-                  FlowState(revoked, -1, -1)
+                  State(revoked)
                 }
-        } yield sr.partitions.map { case (k, s) => k -> s.persistedOffset }
+        } yield sr.toCommitOffsets
         val offsets = f.runSync
         consumer.blockingCommit(offsets)
       }

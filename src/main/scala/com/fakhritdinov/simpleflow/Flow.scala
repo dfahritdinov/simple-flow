@@ -28,7 +28,7 @@ class Flow[F[_]: Concurrent: Parallel: Timer: Unsafe, S, K, V](subscriptions: (T
     val topics = subscriptions.map { case (s, _) => s }.toSet
 
     def onPoll(
-      state:   Ref[F, FlowState[K, S]]
+      state:   Ref[F, State[K, S]]
     )(
       records: Map[TopicPartition, List[ConsumerRecord[K, V]]]
     ): F[Unit] =
@@ -42,7 +42,7 @@ class Flow[F[_]: Concurrent: Parallel: Timer: Unsafe, S, K, V](subscriptions: (T
 
     val loop: F[F[Unit]] = for {
       now   <- Timer[F].clock.monotonic(TimeUnit.MILLISECONDS)
-      state <- Ref.of[F, FlowState[K, S]](FlowState(Map.empty, now, now))
+      state <- Ref.of[F, State[K, S]](State(Map.empty, now, now))
       _     <- consumer.subscribe(topics, rm.listener(state))
     } yield consumer
       .poll(config.pollTimeout)
