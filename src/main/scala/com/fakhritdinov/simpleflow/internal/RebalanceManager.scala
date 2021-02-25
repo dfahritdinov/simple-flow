@@ -1,14 +1,14 @@
 package com.fakhritdinov.simpleflow.internal
 
+import cats.effect.Sync
 import cats.effect.concurrent.Ref
-import cats.effect.{Concurrent, Timer}
 import cats.syntax.all._
 import com.fakhritdinov.effect.Unsafe
 import com.fakhritdinov.effect.Unsafe.implicits._
 import com.fakhritdinov.kafka.TopicPartition
 import com.fakhritdinov.kafka.consumer.{BlockingConsumer, BlockingRebalanceListener}
 
-private[simpleflow] class RebalanceManager[F[_]: Concurrent: Timer: Unsafe, S, K, V](pm: PersistenceManager[F, K, S]) {
+private[simpleflow] class RebalanceManager[F[_]: Sync: Unsafe, S, K, V](pm: PersistenceManager[F, K, S]) {
 
   def listener(state: Ref[F, State[K, S]]): BlockingRebalanceListener[K, V] =
     new BlockingRebalanceListener[K, V] {

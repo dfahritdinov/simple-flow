@@ -5,6 +5,9 @@ import cats.effect.IO
 
 import scala.concurrent.Future
 
+/** Provide interface for producing results by running underline effects as impure side effects.
+  * @tparam F effect to be run as impure side effects
+  */
 trait Unsafe[F[_]] {
   def runSync[A](fa:  F[A]): A
   def runAsync[A](fa: F[A]): Future[A]

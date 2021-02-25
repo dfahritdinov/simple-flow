@@ -1,12 +1,12 @@
 package com.fakhritdinov.simpleflow.internal
 
-import cats.effect.{Concurrent, Timer}
+import cats.effect.{Sync, Timer}
 import cats.syntax.all._
 import com.fakhritdinov.kafka.consumer._
 
 import java.util.concurrent.TimeUnit
 
-private[simpleflow] class CommitManager[F[_]: Concurrent: Timer, S, K, V](
+private[simpleflow] class CommitManager[F[_]: Sync: Timer, S, K, V](
   consumer: Consumer[F, K, V],
   interval: Long
 ) {
@@ -16,8 +16,11 @@ private[simpleflow] class CommitManager[F[_]: Concurrent: Timer, S, K, V](
       now    <- Timer[F].clock.monotonic(TimeUnit.MILLISECONDS)
       should  = state0.lastCommitTime + interval < now
       offsets = state0.toCommitOffsets
-      _      <- if (should) consumer.commit(offsets)
-                else ().pure[F]
-    } yield state0.copy(lastCommitTime = now)
+      state1 <- if (should && offsets.nonEmpty)
+                  for {
+                    _ <- consumer.commit(offsets)
+                  } yield state0.copy(lastCommitTime = now)
+                else state0.pure[F]
+    } yield state1
 
 }

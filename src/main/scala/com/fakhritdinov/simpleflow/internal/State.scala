@@ -10,7 +10,7 @@ private[simpleflow] final case class State[K, S](
 ) {
 
   def toCommitOffsets: Map[TopicPartition, Offset] =
-    partitions.map { case (p, map) => p -> map.map { case (_, ks) => ks.toCommitOffset }.min }
+    partitions.collect { case (p, map) if map.nonEmpty => p -> map.map { case (_, ks) => ks.toCommitOffset }.min }
 
 }
 

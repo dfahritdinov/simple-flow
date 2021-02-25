@@ -10,10 +10,10 @@ trait Fold[F[_], S, K, V] {
     */
   def init: F[S]
 
-  /** Apply received records on existing state
-    * @param state - aggregated state
-    * @param offset - last offset used to get the sate
-    * @param records - received records
+  /** Apply received records on aggregated state
+    * @param state aggregated state
+    * @param offset last offset used to aggregate the state
+    * @param records received records
     * @return new state and commit action
     */
   def apply(state: S, offset: Offset, records: List[ConsumerRecord[K, V]]): F[(S, Fold.Action)]

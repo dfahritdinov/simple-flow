@@ -1,7 +1,7 @@
 package com.fakhritdinov.simpleflow.internal
 
 import cats.Parallel
-import cats.effect.{Concurrent, Timer}
+import cats.effect.{Sync, Timer}
 import cats.syntax.all._
 import com.fakhritdinov.kafka.TopicPartition
 import com.fakhritdinov.simpleflow.Persistence
@@ -10,7 +10,7 @@ import com.fakhritdinov.simpleflow.internal.State.KeyState
 
 import java.util.concurrent.TimeUnit
 
-private[simpleflow] class PersistenceManager[F[_]: Concurrent: Parallel: Timer, K, S](
+private[simpleflow] class PersistenceManager[F[_]: Sync: Parallel: Timer, K, S](
   persistence: Persistence[F, K, S],
   interval:    Long
 ) {
@@ -20,17 +20,12 @@ private[simpleflow] class PersistenceManager[F[_]: Concurrent: Parallel: Timer, 
       now     <- Timer[F].clock.monotonic(TimeUnit.MILLISECONDS)
       should   = state0.lastPersistTime + interval < now
       snapshot = stateToSnapshot(state0)
-      _       <- if (should) persistence.persist(snapshot)
-                 else ().pure[F]
-    } yield {
-      val partitions = state0.partitions.map { case (p, map) =>
-        p -> map.view.mapValues { ks => ks.copy(toCommitOffset = ks.polledOffset) }.toMap
-      }
-      state0.copy(
-        partitions = partitions,
-        lastPersistTime = now
-      )
-    }
+      state1  <- if (should)
+                   for {
+                     _ <- persistence.persist(snapshot)
+                   } yield persistedState(state0, now)
+                 else state0.pure[F]
+    } yield state1
 
   def restore(partitions: Set[TopicPartition]): F[Map[TopicPartition, Map[K, KeyState[S]]]] =
     partitions.toList
@@ -46,5 +41,15 @@ private[simpleflow] class PersistenceManager[F[_]: Concurrent: Parallel: Timer, 
     state.partitions.map { case (p, map) =>
       p -> map.view.mapValues { case KeyState(s, o, _) => s -> o }.toMap
     }
+
+  private def persistedState(state: State[K, S], now: Long) = {
+    val partitions = state.partitions.map { case (p, map) =>
+      p -> map.view.mapValues { ks => ks.copy(toCommitOffset = ks.polledOffset) }.toMap
+    }
+    state.copy(
+      partitions = partitions,
+      lastPersistTime = now
+    )
+  }
 
 }

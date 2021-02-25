@@ -1,14 +1,14 @@
 package com.fakhritdinov.simpleflow.internal
 
 import cats.Parallel
-import cats.effect.Concurrent
+import cats.effect.Sync
 import cats.syntax.all._
 import com.fakhritdinov.kafka._
 import com.fakhritdinov.kafka.consumer._
 import com.fakhritdinov.simpleflow.internal.State.KeyState
 import com.fakhritdinov.simpleflow.{Fold, NoFoldException}
 
-private[simpleflow] class FoldManager[F[_]: Concurrent: Parallel, S, K, V](
+private[simpleflow] class FoldManager[F[_]: Sync: Parallel, S, K, V](
   folds: Map[Topic, Fold[F, S, K, V]]
 ) {
 

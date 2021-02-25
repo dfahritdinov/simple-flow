@@ -3,8 +3,9 @@ package com.fakhritdinov.simpleflow
 import cats.effect.IO
 import com.fakhritdinov.IOSpec
 import com.fakhritdinov.effect.Unsafe.implicits._
+import com.fakhritdinov.kafka.Offset
 import com.fakhritdinov.kafka.consumer.{Consumer, ConsumerRecord}
-import com.fakhritdinov.simpleflow.FlowSpec._
+import com.fakhritdinov.simpleflow.Fold.Action.Commit
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.common.serialization.Serdes
 import org.scalatest._
@@ -16,7 +17,7 @@ import org.testcontainers.utility.DockerImageName
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
-class FlowSpec extends AnyFlatSpec with must.Matchers with BeforeAndAfterAll with IOSpec {
+class FlowSpec extends AnyFlatSpec with must.Matchers with BeforeAndAfterAll with IOSpec with Scope {
 
   lazy val kafkaContainer = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:5.4.3"))
 
@@ -25,9 +26,7 @@ class FlowSpec extends AnyFlatSpec with must.Matchers with BeforeAndAfterAll wit
   override def afterAll() = kafkaContainer.stop()
 
   it should "start simple-flow" in io {
-    flow.use { infinite =>
-      infinite.timeoutTo(5.seconds, IO.unit)
-    }
+    app.use { _ => IO.sleep(5.seconds) }
   }
 
   lazy val consumer = {
@@ -41,20 +40,24 @@ class FlowSpec extends AnyFlatSpec with must.Matchers with BeforeAndAfterAll wit
     Consumer[IO, String, String](consumer, blocker)
   }
 
-  lazy val flow = for {
-    consumer <- consumer.resource
-    flow     <- new Legacy("topic" -> fold).start(consumer, config)
-  } yield flow
+  lazy val app = for {
+    consumer <- consumer
+    fiber    <- flow.start(consumer, persistence, config)
+  } yield fiber
 
 }
 
-object FlowSpec {
+trait Scope { self: IOSpec =>
 
-  val config = Legacy.Config(1.second, 1.second)
+  val config = Flow.Config(1.second, 1.second, 1.second)
 
-  val fold = new Legacy.Fold[IO, String, String, String] {
-    def apply(state: String, records: List[ConsumerRecord[String, String]]) = IO.pure("" -> Legacy.Action.Commit)
-    def init: IO[String] = IO.pure("")
+  val fold = new Fold[IO, String, String, String] {
+    def init = IO.pure("")
+    def apply(state: String, offset: Offset, records: List[ConsumerRecord[String, String]]) = IO("" -> Commit)
   }
+
+  val flow = Flow("topic" -> fold)
+
+  val persistence = Persistence.empty[IO, String, String]
 
 }

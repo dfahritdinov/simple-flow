@@ -1,14 +1,17 @@
 import Dependencies._
 
-name := "simple-flow"
-organization := "com.fakhritdinov"
-scalaVersion := "2.13.5"
-version := "0.0.1-SNAPSHOT"
+lazy val common = Seq(
+  organization := "com.fakhritdinov",
+  scalaVersion := "2.13.5",
+  version := "0.0.1-SNAPSHOT"
+)
 
 lazy val root = { project in file(".") }
-  .configs(IntegrationTest)
+  .settings(common)
+  .settings(name := "simple-flow")
   .settings(Defaults.itSettings)
   .settings(libraryDependencies ++= deps)
+  .configs(IntegrationTest)
 
 val deps = Seq(
   cats.io,
