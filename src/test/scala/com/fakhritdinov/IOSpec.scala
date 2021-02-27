@@ -6,7 +6,7 @@ import org.scalatest.Suite
 import java.util.concurrent.Executors
 import scala.concurrent.ExecutionContext
 
-trait IOSpec { this: Suite =>
+trait IOIOSpec { this: Suite =>
 
   val global   = ExecutionContext.global
   val blocking = ExecutionContext.fromExecutorService(Executors.newCachedThreadPool())

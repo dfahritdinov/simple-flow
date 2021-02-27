@@ -1,6 +1,6 @@
 package com.fakhritdinov.kafka.consumer
 
-import cats.effect.{Blocker, ContextShift, Resource, Sync}
+import cats.effect.{Blocker, ContextShift, Sync}
 import com.fakhritdinov.kafka._
 import org.apache.kafka.clients.consumer.{
   Consumer => JavaConsumer,
@@ -32,10 +32,7 @@ object Consumer {
   def apply[F[_]: Sync: ContextShift, K, V](
     consumer: JavaConsumer[K, V],
     blocker:  Blocker
-  ): Resource[F, Consumer[F, K, V]] = {
-    val acquire = Sync[F].delay { new ConsumerImpl[F, K, V](consumer, blocker) }
-    Resource.make(acquire)(_.close())
-  }
+  ): Consumer[F, K, V] = new ConsumerImpl[F, K, V](consumer, blocker)
 
 }
 
@@ -74,13 +71,6 @@ private final class ConsumerImpl[F[_]: Sync: ContextShift, K, V](
   def wakeup(): F[Unit] =
     Sync[F].delay {
       consumer.wakeup()
-    }
-
-  def close(): F[Unit] =
-    blocker.blockOn {
-      Sync[F].delay {
-        consumer.close()
-      }
     }
 
 }

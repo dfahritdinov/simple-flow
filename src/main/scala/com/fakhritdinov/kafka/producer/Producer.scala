@@ -1,7 +1,6 @@
 package com.fakhritdinov.kafka.producer
 
-import cats.syntax.all._
-import cats.effect.Concurrent
+import cats.effect.Async
 import org.apache.kafka.clients.producer.{Producer => JavaProducer}
 
 trait Producer[F[_], K, V] {
@@ -12,19 +11,16 @@ trait Producer[F[_], K, V] {
 
 object Producer {
 
-  def apply[F[_]: Concurrent, K, V](producer: JavaProducer[K, V]): F[Producer[F, K, V]] =
-    for {
-      _ <- ().pure[F]
-    } yield new Producer[F, K, V] {
+  def apply[F[_]: Async, K, V](producer: JavaProducer[K, V]): Producer[F, K, V] =
+    new ProducerImpl(producer)
 
-      val F = Concurrent[F]
+}
 
-      def send(record: ProducerRecord[K, V]): F[Unit] = {
-        F.async { callback =>
-          producer.send(record.toJava, callback.toJava)
-        }
-      }
+private class ProducerImpl[F[_]: Async, K, V](producer: JavaProducer[K, V]) extends Producer[F, K, V] {
 
+  def send(record: ProducerRecord[K, V]): F[Unit] =
+    Async[F].async { callback =>
+      val _ = producer.send(record.toJava, callback.toJava)
     }
 
 }

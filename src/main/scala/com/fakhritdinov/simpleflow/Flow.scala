@@ -71,7 +71,6 @@ private final class FlowImpl[F[_]: Concurrent: Parallel: Timer: Unsafe, S, K, V]
 
     def flush(state: Ref[F, State[K, S]]): F[Unit] =
       for {
-        _  <- consumer.wakeup()
         s0 <- state.get
         s1 <- pm.persist(s0)
         _  <- cm.commit(s1)
@@ -79,14 +78,21 @@ private final class FlowImpl[F[_]: Concurrent: Parallel: Timer: Unsafe, S, K, V]
 
     val resource = for {
       now    <- Timer[F].clock.monotonic(TimeUnit.MILLISECONDS)
+      error  <- Ref.of[F, Either[Throwable, Unit]](().asRight)
       state  <- Ref.of[F, State[K, S]](State(Map.empty, now, now))
       _      <- consumer.subscribe(topics, rm.listener(state))
-      loop    = (for {
+      poll    = for {
                   records <- consumer.poll(config.pollTimeout)
                   _       <- process(state, records)
-                } yield ()).foreverM[Unit]
+                } yield ()
+      loop    = poll.foreverM[Unit].handleErrorWith(e => error.set(e.asLeft))
       fiber  <- loop.start
-      release = fiber.cancel *> flush(state)
+      release = for {
+                  _ <- fiber.cancel
+                  _ <- consumer.wakeup()
+                  _ <- flush(state)
+                  _ <- error.get.rethrow
+                } yield ()
     } yield fiber -> release
 
     Resource(resource)

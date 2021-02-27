@@ -23,7 +23,10 @@ private[simpleflow] class FoldManager[F[_]: Sync: Parallel, S, K, V](
       records.toList
         .parTraverse { case (partition, records) =>
           val fold = folds.getOrElse(partition.topic, throw new NoFoldException(partition))
-          val s0   = state0.partitions(partition)
+          val s0   = state0.partitions.get(partition) match {
+            case Some(s) => s
+            case None    => Map.empty[K, KeyState[S]] // should newer happened if persistence implemented correctly
+          }
           for {
             rbk <- records
                      .groupBy(_.k)

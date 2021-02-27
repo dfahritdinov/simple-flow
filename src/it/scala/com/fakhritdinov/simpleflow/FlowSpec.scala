@@ -1,63 +1,68 @@
 package com.fakhritdinov.simpleflow
 
 import cats.effect.IO
-import com.fakhritdinov.IOSpec
+import cats.effect.concurrent.Deferred
+import cats.syntax.all._
 import com.fakhritdinov.effect.Unsafe.implicits._
-import com.fakhritdinov.kafka.Offset
-import com.fakhritdinov.kafka.consumer.{Consumer, ConsumerRecord}
-import com.fakhritdinov.simpleflow.Fold.Action.Commit
-import org.apache.kafka.clients.consumer.KafkaConsumer
+import com.fakhritdinov.kafka.consumer.ConsumerRecord
+import com.fakhritdinov.kafka.producer.ProducerRecord
+import com.fakhritdinov.kafka.{Offset, Topic}
+import com.fakhritdinov.{IOSpec, KafkaSpec}
 import org.apache.kafka.common.serialization.Serdes
-import org.scalatest._
 import org.scalatest.flatspec._
 import org.scalatest.matchers._
-import org.testcontainers.containers.KafkaContainer
-import org.testcontainers.utility.DockerImageName
 
 import scala.concurrent.duration._
-import scala.jdk.CollectionConverters._
 
-class FlowSpec extends AnyFlatSpec with must.Matchers with BeforeAndAfterAll with IOSpec with Scope {
-
-  lazy val kafkaContainer = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:5.4.3"))
-
-  override def beforeAll() = kafkaContainer.start()
-
-  override def afterAll() = kafkaContainer.stop()
+class FlowSpec extends AnyFlatSpec with must.Matchers with KafkaSpec with Stubs {
 
   it should "start simple-flow" in io {
-    app.use { _ => IO.sleep(5.seconds) }
+    scope("t1").use { _ => IO.sleep(1.second) }
   }
 
-  lazy val consumer = {
-    val config       = Map[String, AnyRef](
-      "bootstrap.servers" -> kafkaContainer.getBootstrapServers,
-      "client.id"         -> "test-client",
-      "group.id"          -> "test-group"
-    ).asJava
-    val deserializer = Serdes.String().deserializer()
-    val consumer     = new KafkaConsumer[String, String](config, deserializer, deserializer)
-    Consumer[IO, String, String](consumer, blocker)
+  it should "publish and process events" in io {
+    val topic = "t2"
+    scope(topic, 3).use { case (producer, fold) =>
+      for {
+        _     <- producer.send(ProducerRecord(topic, "k", "1st event"))
+        _     <- producer.send(ProducerRecord(topic, "k", "2nd event"))
+        _     <- producer.send(ProducerRecord(topic, "k", "3rd event"))
+        state <- fold.get(5.seconds)
+      } yield state mustBe List("1st event", "2nd event", "3rd event")
+    }
   }
 
-  lazy val app = for {
-    consumer <- consumer
-    fiber    <- flow.start(consumer, persistence, config)
-  } yield fiber
+  implicit val serializer   = Serdes.String().serializer()
+  implicit val deserializer = Serdes.String().deserializer()
+
+  def scope(topic: Topic, capacity: Int = 0) = for {
+    producer <- producer[String, String]
+    consumer <- consumer[String, String]
+    fold      = new AccumulativeFold(capacity)
+    _        <- Flow(topic -> fold).start(consumer, persistence, config)
+  } yield producer -> fold
 
 }
 
-trait Scope { self: IOSpec =>
+trait Stubs { self: IOSpec =>
 
-  val config = Flow.Config(1.second, 1.second, 1.second)
+  val config      = Flow.Config(1.second, 1.second, 1.second)
+  val persistence = Persistence.empty[IO, String, List[String]]
 
-  val fold = new Fold[IO, String, String, String] {
-    def init = IO.pure("")
-    def apply(state: String, offset: Offset, records: List[ConsumerRecord[String, String]]) = IO("" -> Commit)
+  class AccumulativeFold(capacity: Int) extends Fold[IO, List[String], String, String] {
+    private val deferred = Deferred.unsafe[IO, List[String]]
+
+    def get(timeout: FiniteDuration) = deferred.get.timeout(timeout)
+
+    def init = Nil.pure[IO]
+
+    def apply(state0: List[String], offset: Offset, records: List[ConsumerRecord[String, String]]) = {
+      val state1 = state0 ++ records.flatMap(_.v)
+      val update = if (state1.length == capacity) deferred.complete(state1) else IO.unit
+      val result = IO.pure(state1 -> Fold.Action.Commit)
+      update >> result
+    }
+
   }
-
-  val flow = Flow("topic" -> fold)
-
-  val persistence = Persistence.empty[IO, String, String]
 
 }
