@@ -16,4 +16,9 @@ object Dependencies {
     val kafka = "org.testcontainers" % "kafka" % "1.15.2"
   }
 
+  object logs {
+    val slf4j   = "org.slf4j"      % "slf4j-api"       % "1.7.30"
+    val logback = "ch.qos.logback" % "logback-classic" % "1.2.3"
+  }
+
 }

@@ -15,13 +15,21 @@ import scala.jdk.DurationConverters._
 
 trait Consumer[F[_], K, V] {
 
+  def subscribe(topics: Set[Topic]): F[Unit]
+
   def subscribe(topics: Set[Topic], listener: BlockingRebalanceListener[K, V]): F[Unit]
+
+  def unsubscribe(): F[Unit]
 
   def assign(partitions: Set[TopicPartition]): F[Unit]
 
   def poll(timeout: FiniteDuration): F[Map[TopicPartition, List[ConsumerRecord[K, V]]]]
 
   def commit(offsets: Map[TopicPartition, Offset]): F[Unit]
+
+  def endOffsets(partitions: Set[TopicPartition]): F[Map[TopicPartition, Offset]]
+
+  def seekToBeginning(partitions: Set[TopicPartition]): F[Unit]
 
   def wakeup(): F[Unit]
 
@@ -43,10 +51,20 @@ private final class ConsumerImpl[F[_]: Sync: ContextShift, K, V](
 
   val blockingConsumer = new BlockingConsumer[K, V](consumer)
 
+  def subscribe(topics: Set[Topic]): F[Unit] =
+    Sync[F].delay {
+      consumer.subscribe(topics.asJavaCollection)
+    }
+
   def subscribe(topics: Set[Topic], listener: BlockingRebalanceListener[K, V]): F[Unit] =
     Sync[F].delay {
       val javaListener = new ListenerImpl[K, V](blockingConsumer, listener)
       consumer.subscribe(topics.asJavaCollection, javaListener)
+    }
+
+  def unsubscribe(): F[Unit] =
+    Sync[F].delay {
+      consumer.unsubscribe()
     }
 
   def assign(partitions: Set[TopicPartition]): F[Unit] =
@@ -65,6 +83,20 @@ private final class ConsumerImpl[F[_]: Sync: ContextShift, K, V](
     blocker.blockOn {
       Sync[F].delay {
         consumer.commitSync()
+      }
+    }
+
+  def endOffsets(partitions: Set[TopicPartition]): F[Map[TopicPartition, Offset]] =
+    blocker.blockOn {
+      Sync[F].delay {
+        consumer.endOffsets(partitions.toJava).toScala
+      }
+    }
+
+  def seekToBeginning(partitions: Set[TopicPartition]): F[Unit] =
+    blocker.blockOn {
+      Sync[F].delay {
+        consumer.seekToBeginning(partitions.toJava)
       }
     }
 

@@ -1,6 +1,5 @@
 package com.fakhritdinov.simpleflow
 
-import com.fakhritdinov.kafka.Offset
 import com.fakhritdinov.kafka.consumer.ConsumerRecord
 
 trait Fold[F[_], S, K, V] {
@@ -12,11 +11,10 @@ trait Fold[F[_], S, K, V] {
 
   /** Apply received records on aggregated state
     * @param state aggregated state
-    * @param offset last offset used to aggregate the state
     * @param records received records
     * @return new state and commit action
     */
-  def apply(state: S, offset: Offset, records: List[ConsumerRecord[K, V]]): F[(S, Fold.Action)]
+  def apply(state: S, records: List[ConsumerRecord[K, V]]): F[(S, Fold.Action)]
 
 }
 

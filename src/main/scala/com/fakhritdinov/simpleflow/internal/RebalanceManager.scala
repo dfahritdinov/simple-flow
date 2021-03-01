@@ -18,14 +18,12 @@ private[simpleflow] class RebalanceManager[F[_]: Sync: Unsafe, S, K, V](pm: Pers
         partitions: Set[TopicPartition]
       ): Unit = {
         val f       = for {
-          s0 <- state.get
-          s1  = s0.copy(partitions = s0.partitions -- partitions)
-          _  <- state.set(s1)
-          sr <- pm.persist {
-                  val revoked = s0.partitions.view.filterKeys(p => partitions.contains(p)).toMap
-                  State(revoked)
-                }
-        } yield sr.toCommitOffsets
+          s0  <- state.get
+          s1   = s0.copy(partitions = s0.partitions -- partitions)
+          _   <- state.set(s1)
+          sr0  = s0.copy(partitions = s0.partitions.view.filterKeys(p => partitions.contains(p)).toMap)
+          sr1 <- pm.persist(sr0)
+        } yield sr1.commitOffsets
         val offsets = f.runSync
         consumer.blockingCommit(offsets)
       }

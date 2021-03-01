@@ -14,7 +14,7 @@ package object producer {
     def toJava: JavaProducerRecord[K, V] = {
       new JavaProducerRecord[K, V](
         r.topic,
-        r.partition getOrElse null.asInstanceOf[java.lang.Integer],
+        r.partition.map(_.asInstanceOf[java.lang.Integer]) getOrElse null.asInstanceOf[java.lang.Integer],
         r.timestamp.map(_.toEpochMilli.asInstanceOf[java.lang.Long]) getOrElse null.asInstanceOf[java.lang.Long],
         r.key getOrElse null.asInstanceOf[K],
         r.value getOrElse null.asInstanceOf[V],

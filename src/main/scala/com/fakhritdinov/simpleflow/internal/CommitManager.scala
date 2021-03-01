@@ -15,7 +15,7 @@ private[simpleflow] class CommitManager[F[_]: Sync: Timer, S, K, V](
     for {
       now    <- Timer[F].clock.monotonic(TimeUnit.MILLISECONDS)
       should  = state0.lastCommitTime + interval < now
-      offsets = state0.toCommitOffsets
+      offsets = state0.commitOffsets
       state1 <- if (should && offsets.nonEmpty)
                   for {
                     _ <- consumer.commit(offsets)
