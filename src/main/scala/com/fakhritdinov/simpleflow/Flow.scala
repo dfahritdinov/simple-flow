@@ -3,9 +3,8 @@ package com.fakhritdinov.simpleflow
 import cats.Parallel
 import cats.effect.concurrent.Ref
 import cats.effect.syntax.all._
-import cats.effect.{Concurrent, Fiber, Resource, Timer}
+import cats.effect.{ConcurrentEffect, Fiber, Resource, Timer}
 import cats.syntax.all._
-import com.fakhritdinov.effect.Unsafe
 import com.fakhritdinov.kafka._
 import com.fakhritdinov.kafka.consumer._
 import com.fakhritdinov.simpleflow.internal._
@@ -32,14 +31,14 @@ object Flow {
     persistInterval: FiniteDuration
   )
 
-  def apply[F[_]: Concurrent: Parallel: Timer: Unsafe, S, K, V](
+  def apply[F[_]: ConcurrentEffect: Parallel: Timer, S, K, V](
     subscriptions: (Topic, Fold[F, S, K, V])*
   ): Flow[F, S, K, V] =
     new FlowImpl(subscriptions.toSet)
 
 }
 
-private final class FlowImpl[F[_]: Concurrent: Parallel: Timer: Unsafe, S, K, V](
+private final class FlowImpl[F[_]: ConcurrentEffect: Parallel: Timer, S, K, V](
   subscriptions: Set[(Topic, Fold[F, S, K, V])]
 ) extends Flow[F, S, K, V]
     with LazyLogging {

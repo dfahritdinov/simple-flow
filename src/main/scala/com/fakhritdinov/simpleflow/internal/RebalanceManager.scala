@@ -1,17 +1,17 @@
 package com.fakhritdinov.simpleflow.internal
 
-import cats.effect.Sync
+import cats.effect.Effect
 import cats.effect.concurrent.Ref
 import cats.syntax.all._
-import com.fakhritdinov.effect.Unsafe
-import com.fakhritdinov.effect.Unsafe.implicits._
 import com.fakhritdinov.kafka.TopicPartition
 import com.fakhritdinov.kafka.consumer.{BlockingConsumer, BlockingRebalanceListener}
 
-private[simpleflow] class RebalanceManager[F[_]: Sync: Unsafe, S, K, V](pm: PersistenceManager[F, K, S]) {
+private[simpleflow] class RebalanceManager[F[_]: Effect, S, K, V](pm: PersistenceManager[F, K, S]) {
 
   def listener(state: Ref[F, State[K, S]]): BlockingRebalanceListener[K, V] =
     new BlockingRebalanceListener[K, V] {
+
+      import Effect.ops._
 
       def onPartitionsRevoked(
         consumer:   BlockingConsumer[K, V],
@@ -24,7 +24,7 @@ private[simpleflow] class RebalanceManager[F[_]: Sync: Unsafe, S, K, V](pm: Pers
           sr0  = s0.copy(partitions = s0.partitions.view.filterKeys(p => partitions.contains(p)).toMap)
           sr1 <- pm.persist(sr0)
         } yield sr1.commitOffsets
-        val offsets = f.runSync
+        val offsets = f.toIO.unsafeRunSync()
         consumer.blockingCommit(offsets)
       }
 
@@ -38,7 +38,7 @@ private[simpleflow] class RebalanceManager[F[_]: Sync: Unsafe, S, K, V](pm: Pers
           s1  = s0.copy(partitions = s0.partitions ++ rs)
           _  <- state.set(s1)
         } yield ()
-        f.runSync
+        f.toIO.unsafeRunSync()
       }
 
       def onPartitionsLost(
@@ -50,7 +50,7 @@ private[simpleflow] class RebalanceManager[F[_]: Sync: Unsafe, S, K, V](pm: Pers
           s1  = s0.copy(partitions = s0.partitions -- partitions)
           _  <- state.set(s1)
         } yield ()
-        f.runSync
+        f.toIO.unsafeRunSync()
       }
 
     }

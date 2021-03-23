@@ -3,7 +3,6 @@ package com.fakhritdinov.simpleflow
 import cats.effect.IO
 import cats.effect.concurrent.Ref
 import cats.syntax.all._
-import com.fakhritdinov.effect.Unsafe.implicits._
 import com.fakhritdinov.kafka.Topic
 import com.fakhritdinov.kafka.consumer.ConsumerRecord
 import com.fakhritdinov.kafka.producer.ProducerRecord
