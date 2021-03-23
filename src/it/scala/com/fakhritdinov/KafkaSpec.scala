@@ -24,7 +24,7 @@ trait KafkaSpec extends IOSpec with BeforeAndAfterAll { this: Suite =>
   def consumer[K: Deserializer, V: Deserializer]: Resource[IO, Consumer[IO, K, V]] = {
     val config            = Map[String, AnyRef](
       "bootstrap.servers" -> container.getBootstrapServers,
-      "client.id"         -> s"test-consumer",
+      "client.id"         -> s"test-consumer-$now",
       "group.id"          -> s"test-group"
     ).asJava
     val keyDeserializer   = implicitly[Deserializer[K]]
@@ -41,7 +41,7 @@ trait KafkaSpec extends IOSpec with BeforeAndAfterAll { this: Suite =>
   def producer[K: Serializer, V: Serializer]: Resource[IO, Producer[IO, K, V]] = {
     val config          = Map[String, AnyRef](
       "bootstrap.servers" -> container.getBootstrapServers,
-      "client.id"         -> s"test-producer"
+      "client.id"         -> s"test-producer-$now"
     ).asJava
     val keySerializer   = implicitly[Serializer[K]]
     val valueSerializer = implicitly[Serializer[V]]
@@ -77,5 +77,7 @@ trait KafkaSpec extends IOSpec with BeforeAndAfterAll { this: Suite =>
         "--bootstrap-server", "localhost:9092",
       )
   // format: on
+
+  def now = System.currentTimeMillis
 
 }

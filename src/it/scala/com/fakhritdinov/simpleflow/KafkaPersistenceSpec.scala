@@ -9,7 +9,7 @@ import org.scalatest.matchers._
 
 import scala.concurrent.duration._
 
-class KafkaPersistenceSpec extends AnyFlatSpec with must.Matchers with KafkaSpec with Stubs {
+class KafkaPersistenceSpec extends AnyFlatSpec with must.Matchers with KafkaSpec {
 
   it should "restore state" in io {
     val topic = "t1"
