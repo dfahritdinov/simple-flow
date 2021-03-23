@@ -13,6 +13,7 @@ import java.time.Instant
 import java.util.{Collection => JavaCollection, Map => JavaMap}
 import scala.jdk.CollectionConverters._
 
+// TODO: rewrite via Type Classes: ToScala & ToJava
 package object consumer {
 
   implicit final class JavaTopicPartitionOps(val javaPartitions: JavaCollection[JavaTopicPartition]) extends AnyVal {
@@ -26,6 +27,13 @@ package object consumer {
 
     def toJava: JavaCollection[JavaTopicPartition] =
       partitions.map(p => new JavaTopicPartition(p.topic, p.partition)).asJavaCollection
+
+  }
+
+  implicit final class JavaOffsetsOps(val offsets: JavaMap[JavaTopicPartition, java.lang.Long]) extends AnyVal {
+
+    def toScala: Map[TopicPartition, Offset] =
+      offsets.asScala.map { case (p, o) => TopicPartition(p.topic, p.partition) -> o.toLong }.toMap
 
   }
 

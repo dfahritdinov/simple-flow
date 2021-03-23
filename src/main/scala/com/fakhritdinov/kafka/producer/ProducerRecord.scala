@@ -1,7 +1,7 @@
 package com.fakhritdinov.kafka.producer
 
 import cats.syntax.option._
-import com.fakhritdinov.kafka.{Header, Topic}
+import com.fakhritdinov.kafka.{Header, Partition, Topic}
 
 import java.time.Instant
 
@@ -9,7 +9,7 @@ final case class ProducerRecord[K, V](
   topic:     Topic,
   key:       Option[K],
   value:     Option[V],
-  partition: Option[Integer] = None,
+  partition: Option[Partition] = None,
   timestamp: Option[Instant] = None,
   headers:   Set[Header] = Set.empty
 )

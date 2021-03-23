@@ -79,7 +79,7 @@ private final class FlowImpl[F[_]: Concurrent: Parallel: Timer: Unsafe, S, K, V]
     val resource = for {
       now    <- Timer[F].clock.monotonic(TimeUnit.MILLISECONDS)
       error  <- Ref.of[F, Either[Throwable, Unit]](().asRight)
-      state  <- Ref.of[F, State[K, S]](State(Map.empty, now, now))
+      state  <- Ref.of[F, State[K, S]](State(Map.empty, Map.empty, Map.empty, now, now))
       _      <- consumer.subscribe(topics, rm.listener(state))
       poll    = for {
                   records <- consumer.poll(config.pollTimeout)

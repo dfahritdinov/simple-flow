@@ -9,6 +9,7 @@ lazy val common = Seq(
 lazy val root = { project in file(".") }
   .settings(common)
   .settings(name := "simple-flow")
+  .settings(scalacOptions.in(IntegrationTest) ~= filterConsoleScalacOptions)
   .settings(Defaults.itSettings)
   .settings(libraryDependencies ++= deps)
   .configs(IntegrationTest)
@@ -16,6 +17,8 @@ lazy val root = { project in file(".") }
 val deps = Seq(
   cats.io,
   kafka.client,
+  logs.slf4j,
+  logs.logback,
   testcontainers.kafka % IntegrationTest,
   scalatest            % IntegrationTest,
   scalatest            % Test
