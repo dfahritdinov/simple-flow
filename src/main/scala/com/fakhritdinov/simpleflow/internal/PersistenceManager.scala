@@ -27,14 +27,14 @@ private[simpleflow] class PersistenceManager[F[_]: Sync: Timer, K, S](
   def restore(partitions: Set[TopicPartition]): F[Snapshot[K, S]] =
     persistence.restore(partitions)
 
-  private def persistedState(state: State[K, S], persisted: Persisted[K], now: Long) = {
-    val commit = state.polledOffsets.flatMap { case (p, offsets) =>
+  private def persistedState(state0: State[K, S], persisted: Persisted[K], now: Long) = {
+    val commitOffsets = state0.polledOffsets.flatMap { case (p, offsets) =>
       persisted.get(p).map { persisted =>
         p -> offsets.collect { case (k, o) if persisted contains k => o }.min
       }
     }
-    state.copy(
-      commitOffsets = commit,
+    state0.copy(
+      commitOffsets = state0.commitOffsets ++ commitOffsets,
       lastPersistTime = now
     )
   }
