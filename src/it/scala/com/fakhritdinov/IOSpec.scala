@@ -8,7 +8,7 @@ import scala.concurrent.ExecutionContext
 
 trait IOSpec { this: Suite =>
 
-  val global   = ExecutionContext.global
+  val global   = ExecutionContext.fromExecutorService(Executors.newFixedThreadPool(8))
   val blocking = ExecutionContext.fromExecutorService(Executors.newCachedThreadPool())
 
   val blocker = Blocker.liftExecutionContext(blocking)

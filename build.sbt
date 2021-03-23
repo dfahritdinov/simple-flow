@@ -19,6 +19,7 @@ val deps = Seq(
   kafka.client,
   logs.slf4j,
   logs.logback,
+  logs.scala,
   testcontainers.kafka % IntegrationTest,
   scalatest            % IntegrationTest,
   scalatest            % Test

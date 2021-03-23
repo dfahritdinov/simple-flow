@@ -25,7 +25,8 @@ trait KafkaSpec extends IOSpec with BeforeAndAfterAll { this: Suite =>
     val config            = Map[String, AnyRef](
       "bootstrap.servers" -> container.getBootstrapServers,
       "client.id"         -> s"test-consumer-$now",
-      "group.id"          -> s"test-group"
+      "group.id"          -> s"test-group-$now",
+      "auto.offset.reset" -> "earliest"
     ).asJava
     val keyDeserializer   = implicitly[Deserializer[K]]
     val valueDeserializer = implicitly[Deserializer[V]]

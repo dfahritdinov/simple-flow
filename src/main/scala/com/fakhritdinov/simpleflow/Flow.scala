@@ -9,6 +9,7 @@ import com.fakhritdinov.effect.Unsafe
 import com.fakhritdinov.kafka._
 import com.fakhritdinov.kafka.consumer._
 import com.fakhritdinov.simpleflow.internal._
+import com.typesafe.scalalogging.LazyLogging
 
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.FiniteDuration
@@ -40,7 +41,8 @@ object Flow {
 
 private final class FlowImpl[F[_]: Concurrent: Parallel: Timer: Unsafe, S, K, V](
   subscriptions: Set[(Topic, Fold[F, S, K, V])]
-) extends Flow[F, S, K, V] {
+) extends Flow[F, S, K, V]
+    with LazyLogging {
 
   def start(
     consumer:    Consumer[F, K, V],
@@ -58,7 +60,7 @@ private final class FlowImpl[F[_]: Concurrent: Parallel: Timer: Unsafe, S, K, V]
     def process(
       state:   Ref[F, State[K, S]],
       records: Map[TopicPartition, List[ConsumerRecord[K, V]]]
-    ): F[Unit] =
+    ): F[Unit] = {
       if (records.isEmpty) ().pure[F]
       else
         for {
@@ -68,6 +70,7 @@ private final class FlowImpl[F[_]: Concurrent: Parallel: Timer: Unsafe, S, K, V]
           s3 <- cm.commit(s2)
           _  <- state.set(s3)
         } yield ()
+    }
 
     def flush(state: Ref[F, State[K, S]]): F[Unit] =
       for {

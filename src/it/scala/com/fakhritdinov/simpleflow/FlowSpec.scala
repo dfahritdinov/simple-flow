@@ -8,6 +8,7 @@ import com.fakhritdinov.kafka.Topic
 import com.fakhritdinov.kafka.consumer.ConsumerRecord
 import com.fakhritdinov.kafka.producer.ProducerRecord
 import com.fakhritdinov.{IOSpec, KafkaSpec}
+import com.typesafe.scalalogging.LazyLogging
 import org.apache.kafka.common.serialization.Serdes
 import org.scalatest.flatspec._
 import org.scalatest.matchers._
@@ -17,11 +18,14 @@ import scala.concurrent.duration._
 class FlowSpec extends AnyFlatSpec with must.Matchers with KafkaSpec with Stubs {
 
   it should "start simple-flow" in io {
-    scope("t1").use { _ => IO.sleep(1.second) }
+    val topic = "t1"
+    createTopic(topic, 3).getExitCode mustBe 0
+    scope(topic).use { _ => IO.sleep(1.second) }
   }
 
   it should "publish and process events" in io {
     val topic = "t2"
+    createTopic(topic, 3).getExitCode mustBe 0
     scope(topic).use { case (producer, fold) =>
       for {
         _     <- producer.send(ProducerRecord(topic, "k", "1st event"))
@@ -44,7 +48,7 @@ class FlowSpec extends AnyFlatSpec with must.Matchers with KafkaSpec with Stubs 
 
 }
 
-trait Stubs { self: IOSpec =>
+trait Stubs extends LazyLogging { self: IOSpec =>
 
   val config      = Flow.Config(1.second, 1.second, 1.second)
   val persistence = Persistence.empty[IO, String, List[String]]
