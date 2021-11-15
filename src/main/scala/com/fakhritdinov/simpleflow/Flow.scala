@@ -3,7 +3,7 @@ package com.fakhritdinov.simpleflow
 import cats.Parallel
 import cats.effect.concurrent.Ref
 import cats.effect.syntax.all._
-import cats.effect.{ConcurrentEffect, Fiber, Resource, Timer}
+import cats.effect.{Clock, ConcurrentEffect, Fiber, Resource, Timer}
 import cats.syntax.all._
 import com.fakhritdinov.kafka._
 import com.fakhritdinov.kafka.consumer._
@@ -79,7 +79,7 @@ private final class FlowImpl[F[_]: ConcurrentEffect: Parallel: Timer, S, K, V](
       } yield ()
 
     val resource = for {
-      now    <- Timer[F].clock.monotonic(TimeUnit.MILLISECONDS)
+      now    <- Clock[F].monotonic(TimeUnit.MILLISECONDS)
       error  <- Ref.of[F, Either[Throwable, Unit]](().asRight)
       state  <- Ref.of[F, State[K, S]](State(Map.empty, Map.empty, Map.empty, now, now))
       _      <- consumer.subscribe(topics, rm.listener(state))

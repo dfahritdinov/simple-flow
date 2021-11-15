@@ -1,6 +1,6 @@
 package com.fakhritdinov.simpleflow.internal
 
-import cats.effect.{Sync, Timer}
+import cats.effect.{Clock, Sync, Timer}
 import cats.syntax.all._
 import com.fakhritdinov.kafka.TopicPartition
 import com.fakhritdinov.simpleflow.Persistence
@@ -15,7 +15,7 @@ private[simpleflow] class PersistenceManager[F[_]: Sync: Timer, K, S](
 
   def persist(state0: State[K, S]): F[State[K, S]] =
     for {
-      now    <- Timer[F].clock.monotonic(TimeUnit.MILLISECONDS)
+      now    <- Clock[F].monotonic(TimeUnit.MILLISECONDS)
       should  = state0.lastPersistTime + interval < now
       state1 <- if (should)
                   for {
@@ -27,14 +27,16 @@ private[simpleflow] class PersistenceManager[F[_]: Sync: Timer, K, S](
   def restore(partitions: Set[TopicPartition]): F[Snapshot[K, S]] =
     persistence.restore(partitions)
 
-  private def persistedState(state0: State[K, S], persisted: Persisted[K], now: Long) = {
-    val commitOffsets = state0.polledOffsets.flatMap { case (p, offsets) =>
-      persisted.get(p).map { persisted =>
-        p -> offsets.collect { case (k, o) if persisted contains k => o }.min
+  private def persistedState(state: State[K, S], persisted: Persisted[K], now: Long) = {
+    val commit = state.polledOffsets.flatMap { case (partition, offsets) =>
+      persisted.get(partition).map { persisted =>
+        val persistedOffsets = offsets.collect { case (k, o) if persisted contains k => o }
+        val offset           = persistedOffsets.minOption.getOrElse(offsets.values.min)
+        partition -> offset
       }
     }
-    state0.copy(
-      commitOffsets = state0.commitOffsets ++ commitOffsets,
+    state.copy(
+      commitOffsets = state.commitOffsets ++ commit,
       lastPersistTime = now
     )
   }

@@ -1,6 +1,6 @@
 package com.fakhritdinov.simpleflow.internal
 
-import cats.effect.{Sync, Timer}
+import cats.effect.{Clock, Sync, Timer}
 import cats.syntax.all._
 import com.fakhritdinov.kafka.consumer._
 
@@ -13,7 +13,7 @@ private[simpleflow] class CommitManager[F[_]: Sync: Timer, S, K, V](
 
   def commit(state0: State[K, S]): F[State[K, S]] =
     for {
-      now    <- Timer[F].clock.monotonic(TimeUnit.MILLISECONDS)
+      now    <- Clock[F].monotonic(TimeUnit.MILLISECONDS)
       should  = state0.lastCommitTime + interval < now
       offsets = state0.commitOffsets
       state1 <- if (should && offsets.nonEmpty)

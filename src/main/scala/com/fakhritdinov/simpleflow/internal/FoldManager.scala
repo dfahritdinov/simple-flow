@@ -28,23 +28,23 @@ private[simpleflow] class FoldManager[F[_]: Sync: Parallel, S, K, V](
       records.toList
         .parTraverse { case (partition, records) =>
           val fold = folds.getOrElse(partition.topic, throw new NoFoldException(partition))
-          val s0   = state0.partitions.get(partition).fold(Map.empty[K, S])(s => s)
+          val s0   = state0.partitions.getOrElse(partition, Map.empty[K, S])
           for {
             rbk   <- records.groupBy(_.k).collect { case (Some(k), r) => k -> r }.toList.pure[F]
             res   <- rbk
                        .traverse { case (key, records) =>
-                         val s = s0.get(key).fold(fold.init)(_.pure[F])
                          for {
-                           s <- s
+                           s <- s0.get(key).fold(fold.init)(_.pure[F])
                            r <- fold(s, records)
                          } yield key -> r
                        }
                        .map(_.toMap)
             s1     = res.view.mapValues { case (s, _) => s }.toMap
             commit = {
-              val keys    = res.collect { case (p, (_, Commit)) => p }.toSet
-              val offsets = polledOffsets(partition)
-              offsets.collect { case (k, o) if keys contains k => o }.min
+              val keys            = res.collect { case (p, (_, Commit)) => p }.toSet
+              val offsets         = polledOffsets(partition)
+              val offsetsToCommit = offsets.collect { case (k, o) if keys contains k => o }
+              offsetsToCommit.minOption.getOrElse(offsets.values.min)
             }
           } yield partition -> ((s0 ++ s1) -> commit)
         }
